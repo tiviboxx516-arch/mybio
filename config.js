@@ -29,7 +29,7 @@ export default {
   },
 
   ui: {
-    buttonLabel: '???',
+    buttonLabel: 'Click here !',
     hint: 'Bấm ✕ hoặc ESC để quay lại'
   },
 
