@@ -13,15 +13,22 @@
 *{box-sizing:border-box}
 html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,sans-serif}
 *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='14' cy='14' r='9' fill='%23ff8fbf' fill-opacity='.3'/%3E%3Ccircle cx='14' cy='14' r='4.5' fill='%23ff8fbf'/%3E%3Ccircle cx='14' cy='14' r='2' fill='%23fff'/%3E%3C/svg%3E") 14 14,auto!important}
-#viewer{position:fixed;inset:0;touch-action:none}
-#viewer canvas{display:block;width:100%;height:100%;outline:none}
+#viewer{position:fixed;inset:0;touch-action:none;overscroll-behavior:none}
+#viewer canvas{display:block;width:100%;height:100%;outline:none;touch-action:none;-webkit-tap-highlight-color:transparent}
 
 /* loading */
 #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);transition:opacity .7s,visibility .7s}
 #loading.hidden{opacity:0;visibility:hidden;pointer-events:none}
 #loadStatus{font:400 12px "Be Vietnam Pro";letter-spacing:.08em;color:var(--mute);margin:0}
 .bar{width:min(260px,70vw);height:2px;background:var(--line);position:relative}
-#progressFill{position:absolute;inset:0 auto 0 0;width:0;background:var(--pink);box-shadow:0 0 12px var(--pink);transition:width .3s}
+#progressFill{position:absolute;inset:0 auto 0 0;width:0;background:var(--pink);box-shadow:0 0 12px var(--pink);transition:width .2s}
+#loading.indeterminate #progressPct{animation:loadPulse 1.15s ease-in-out infinite}
+#loading.indeterminate #progressFill{width:34%!important;animation:loadSweep 1.2s ease-in-out infinite;transition:none}
+#loading.error #progressPct{color:var(--pink)}
+#retryBtn{margin-top:2px;padding:10px 20px;border:1px solid var(--line);border-radius:999px;background:rgba(255,143,191,.1);color:var(--ink);font:600 12px "Be Vietnam Pro";letter-spacing:.1em}
+#retryBtn:not([hidden]){display:block}
+@keyframes loadSweep{0%{transform:translateX(-115%)}100%{transform:translateX(320%)}}
+@keyframes loadPulse{0%,100%{opacity:.45}50%{opacity:1}}
 #progressPct{font:300 54px "Quicksand";letter-spacing:-.02em;margin:0}
 
 /* nút mở bio */
@@ -166,9 +173,10 @@ img,canvas{-webkit-user-drag:none;user-drag:none}
 <div id="viewer"></div>
 
 <div id="loading">
-  <p id="progressPct">0%</p>
+  <p id="progressPct">…</p>
   <div class="bar"><div id="progressFill"></div></div>
-  <p id="loadStatus">Đang tải ảnh 360°…</p>
+  <p id="loadStatus">Load</p>
+  <button id="retryBtn" type="button" hidden>Thử lại</button>
 </div>
 
 <button id="bio-btn"><i></i>Giới thiệu</button>
@@ -179,6 +187,24 @@ img,canvas{-webkit-user-drag:none;user-drag:none}
   <div class="sheet" id="sheet"><div class="spot"></div><button id="bio-close" aria-label="Đóng">✕</button></div>
 </div>
 
+<script>
+/* Nếu module/CDN không khởi động được trên mobile, đừng để màn hình Load treo vô hạn. */
+window.__viewerBootWatchdog = setTimeout(() => {
+  if (window.__viewerBootStarted) return;
+  const pct = document.getElementById('progressPct');
+  const status = document.getElementById('loadStatus');
+  const retry = document.getElementById('retryBtn');
+  const overlay = document.getElementById('loading');
+  if (pct) pct.textContent = '!';
+  if (status) status.textContent = 'Lỗi khởi tạo — chạm Thử lại';
+  if (overlay) overlay.classList.remove('indeterminate');
+  if (overlay) overlay.classList.add('error');
+  if (retry) {
+    retry.hidden = false;
+    retry.onclick = () => location.reload();
+  }
+}, 20000);
+</script>
 <script type="module">
 import CONFIG from './config.js';
 import * as THREE from 'three';
@@ -189,37 +215,110 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = id => document.getElementById(id);
 renderBio();
+window.__viewerBootStarted = true;
+clearTimeout(window.__viewerBootWatchdog);
 const viewer = $('viewer'), loadingEl = $('loading'), loadStatus = $('loadStatus');
 const progressFill = $('progressFill'), progressPct = $('progressPct');
 const bioEl = $('bio'), bioBtn = $('bio-btn'), nameEl = $('bioNameText');
 
 let scene, camera, renderer, controls, panorama, textGroup;
 let userMoved = false, lastFrame = 0, bioOpen = false;
+let userInteracting = false, resumeSpinAt = 0;
+let sceneReady = false, loadFailed = false, highestProgress = 0;
+const retryBtn = $('retryBtn');
+const IS_MOBILE = matchMedia('(pointer: coarse)').matches || innerWidth < 700 || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
 const SPIN = CONFIG.scene.spin;
 
 const S = CONFIG.scene;
 const TEXT = { label:S.text, size:S.size, depth:S.depth, curveSegments:16, bevelThickness:.032, bevelSize:.024, bevelSegments:5, fraction:S.screenFraction };
 
-function setProgress(p, msg){
+function setProgress(p, msg = 'Load'){
   p = Math.max(0, Math.min(1, p));
+  highestProgress = Math.max(highestProgress, p); // Tiến độ không nhảy lùi khi đổi nguồn font dự phòng.
+  p = highestProgress;
+  loadingEl.classList.remove('indeterminate', 'error');
   progressPct.textContent = Math.round(p*100) + '%';
-  progressFill.style.width = p*100 + '%';
+  progressFill.style.width = (p*100) + '%';
   if(msg) loadStatus.textContent = msg;
 }
 
-async function fetchWithProgress(url, onProgress){
-  const res = await fetch(url, {mode:'cors'});
-  if(!res.ok) throw new Error('HTTP ' + res.status);
-  const total = +res.headers.get('Content-Length') || 0;
-  if(!res.body || !total){ const b = await res.blob(); onProgress?.(1); return b; }
-  const reader = res.body.getReader(), chunks = []; let got = 0;
-  for(;;){
-    const {done, value} = await reader.read();
-    if(done) break;
-    chunks.push(value); got += value.length;
-    onProgress?.(Math.min(got/total, 1));
+function setIndeterminate(msg = 'Load'){
+  loadingEl.classList.remove('error');
+  loadingEl.classList.add('indeterminate');
+  progressPct.textContent = '…';
+  if(msg) loadStatus.textContent = msg;
+}
+
+function showLoadError(message){
+  loadFailed = true;
+  loadingEl.classList.remove('indeterminate');
+  loadingEl.classList.add('error');
+  progressPct.textContent = '!';
+  progressFill.style.width = '100%';
+  loadStatus.textContent = message || 'Lỗi tải — chạm Thử lại';
+  retryBtn.hidden = false;
+}
+
+function withTimeout(promise, ms, label = 'Tải quá lâu'){
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), ms); })
+  ]).finally(() => clearTimeout(timer));
+}
+
+/* TextureLoader dùng đường tải ảnh native của trình duyệt; ổn định hơn fetch/blob trên Safari mobile. */
+function loadTextureWithTimeout(url, timeoutMs = 30000){
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Quá thời gian tải ảnh'));
+    }, timeoutMs);
+    loader.load(url, texture => {
+      if (settled) { texture.dispose(); return; }
+      settled = true;
+      clearTimeout(timer);
+      resolve(texture);
+    }, undefined, error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error instanceof Error ? error : new Error('Không tải được ảnh'));
+    });
+  });
+}
+
+async function fetchWithProgress(url, onProgress, timeoutMs = 9000){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {mode:'cors', signal:controller.signal, cache:'force-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const total = Number(res.headers.get('Content-Length')) || 0;
+    if(!res.body || typeof res.body.getReader !== 'function' || !total){
+      const blob = await res.blob();
+      onProgress?.(1);
+      return blob;
+    }
+    const reader = res.body.getReader(), chunks = [];
+    let got = 0;
+    for(;;){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value); got += value.byteLength;
+      onProgress?.(Math.min(got / total, 1));
+    }
+    return new Blob(chunks);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Quá thời gian tải tài nguyên');
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return new Blob(chunks);
 }
 
 /* TTF -> THREE.Font */
@@ -275,32 +374,54 @@ function setupScene(){
   scene.background = new THREE.Color(0x07080c);
   camera = new THREE.PerspectiveCamera(46, innerWidth/innerHeight, .1, 5000);
   camera.position.set(0,0,24);
-  renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+  renderer = new THREE.WebGLRenderer({antialias:!IS_MOBILE, powerPreference:IS_MOBILE?'low-power':'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1, IS_MOBILE ? 1.35 : 1.8));
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
   viewer.appendChild(renderer.domElement);
 
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
-  scene.add(new THREE.HemisphereLight(0xe7f7ff, 0x172238, 1.7));
+  /* PMREM + RoomEnvironment khá nặng trên điện thoại đời cũ; bỏ bước này trên mobile. */
+  if (!IS_MOBILE) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const env = pmrem.fromScene(new RoomEnvironment(), .04);
+    scene.environment = env.texture;
+    pmrem.dispose();
+  }
+  scene.add(new THREE.HemisphereLight(0xe7f7ff, 0x172238, IS_MOBILE ? 2.0 : 1.7));
   const key = new THREE.DirectionalLight(0xffffff, 3); key.position.set(-7,10,15); scene.add(key);
   const a = new THREE.PointLight(0x66e5ff, 150, 90); a.position.set(8,5,10); scene.add(a);
   const b = new THREE.PointLight(0xff9ec9, 110, 90); b.position.set(-8,-5,-10); scene.add(b);
 
   controls = new OrbitControls(camera, renderer.domElement);
-  Object.assign(controls, {enableDamping:true, dampingFactor:.075, enablePan:false, zoomSpeed:.85, rotateSpeed:.7,
-    minPolarAngle:.002, maxPolarAngle:Math.PI-.002, minDistance:2.8, maxDistance:1000});
-  controls.addEventListener('start', () => userMoved = true);
+  Object.assign(controls, {
+    enableDamping:true,
+    dampingFactor:IS_MOBILE ? .13 : .095,
+    enablePan:false,
+    enableZoom:true,
+    zoomSpeed:IS_MOBILE ? 1.15 : .9,
+    rotateSpeed:IS_MOBILE ? 1.65 : 1.15,
+    minPolarAngle:.002,
+    maxPolarAngle:Math.PI-.002,
+    minDistance:2.8,
+    maxDistance:1000
+  });
+  controls.addEventListener('start', () => {
+    userMoved = true;
+    userInteracting = true;
+  });
+  controls.addEventListener('end', () => {
+    userInteracting = false;
+    resumeSpinAt = performance.now() + 900;
+  });
   controls.update();
 }
 
 function buildPanorama(tex){
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const g = new THREE.SphereGeometry(1200,160,100); g.scale(-1,1,1);
+  const g = new THREE.SphereGeometry(1200, IS_MOBILE ? 88 : 160, IS_MOBILE ? 56 : 100); g.scale(-1,1,1);
   panorama = new THREE.Mesh(g, new THREE.MeshBasicMaterial({map:tex, depthWrite:false, toneMapped:false}));
   panorama.frustumCulled = false; panorama.renderOrder = -1000; panorama.rotation.order = 'YXZ';
   scene.add(panorama);
@@ -478,6 +599,7 @@ function fit(){
   sheet.style.setProperty('--k', fitK);
 }
 addEventListener('resize', fit);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { if (renderer && camera) resizeViewer(); fit(); });
 addEventListener('orientationchange', () => setTimeout(fit, 250));
 sheet.addEventListener('load', fit, true);
 document.fonts?.ready.then(fit);
@@ -526,11 +648,24 @@ function frameText(){
   controls.update();
 }
 
+function resizeViewer(){
+  if (!renderer || !camera) return;
+  const w = Math.max(1, Math.round(window.visualViewport?.width || innerWidth));
+  const h = Math.max(1, Math.round(window.visualViewport?.height || innerHeight));
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+  if (!userMoved && textGroup) frameText();
+}
+addEventListener('resize', resizeViewer);
+
 function animate(now = 0){
   requestAnimationFrame(animate);
   const dt = lastFrame ? Math.min((now-lastFrame)/1000, .05) : 0; lastFrame = now;
+  /* Không render nền trống liên tục trong lúc ảnh đầu tiên đang tải, đặc biệt trên mobile. */
+  if (!panorama && !textGroup) return;
   controls?.update();
-  if(dt && !bioOpen){
+  if(dt && !bioOpen && !userInteracting && now >= resumeSpinAt){
     if(textGroup) textGroup.rotation.y += SPIN*dt;
     if(panorama) panorama.rotation.y += SPIN*dt;
   }
@@ -590,37 +725,81 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('contextmenu', e => { if(e.target.closest?.('#viewer')) e.preventDefault(); });
 
 async function main(){
-  setupScene(); animate();
-  renderer.domElement.addEventListener('pointerdown', e => { e.preventDefault(); getSelection()?.removeAllRanges(); });
-  setProgress(0, 'Đang tải ảnh 360°…');
-  let tex;
-  try{
-    const blob = await fetchWithProgress(CONFIG.scene.panorama, p => setProgress(p*.55, 'Đang tải ảnh 360°…'));
-    const url = URL.createObjectURL(blob);
-    tex = await new THREE.TextureLoader().loadAsync(url);
-    URL.revokeObjectURL(url);
-  }catch(e){ loadStatus.textContent = 'Không tải được ảnh 360°'; return; }
-  buildPanorama(tex);
-  setupAudio();
+  loadFailed = false;
+  retryBtn.hidden = true;
+  loadingEl.classList.remove('hidden', 'error');
+  highestProgress = 0;
+  setIndeterminate('Load');
 
-  setProgress(.58, 'Đang tải font…');
-  let font = await loadFont(p => setProgress(.58 + p*.34, 'Đang tải font…'));
-  if(!font){
-    try{
-      font = await new FontLoader().loadAsync('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/optimer_bold.typeface.json');
-    }catch(e){ loadStatus.textContent = 'Không tải được font'; return; }
+  try {
+    if (!sceneReady) {
+      setupScene();
+      sceneReady = true;
+      animate();
+      renderer.domElement.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        getSelection()?.removeAllRanges();
+      }, {passive:false});
+    }
+
+    /* Image loading has no reliable byte progress on all mobile browsers: show a moving bar. */
+    setIndeterminate('Load');
+    const tex = await loadTextureWithTimeout(CONFIG.scene.panorama, 30000);
+    if (panorama) {
+      scene.remove(panorama);
+      panorama.geometry.dispose();
+      panorama.material.map?.dispose();
+      panorama.material.dispose();
+      panorama = null;
+    }
+    buildPanorama(tex);
+    setProgress(.56, 'Load');
+    setupAudio();
+
+    setIndeterminate('Load');
+    let font = null;
+    try {
+      font = await withTimeout(loadFont(p => setProgress(.56 + p*.34, 'Load')), 25000, 'Quá thời gian tải font');
+    } catch(e) {
+      console.warn('Không tải được font tuỳ chỉnh, chuyển sang font dự phòng:', e);
+    }
+    if(!font){
+      try {
+        font = await withTimeout(
+          new FontLoader().loadAsync('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/optimer_bold.typeface.json'),
+          9000,
+          'Quá thời gian tải font'
+        );
+      } catch(e) {
+        console.warn('Font dự phòng không tải được:', e);
+      }
+    }
+    if(!font) throw new Error('Không tải được font từ các nguồn dự phòng');
+
+    setProgress(.95, 'Load');
+    if(textGroup){
+      scene.remove(textGroup);
+      textGroup.traverse(o => { if(o.geometry) o.geometry.dispose(); });
+    }
+    textGroup = buildText(font);
+    frameText();
+    attachPointer(renderer.domElement);
+    setProgress(1, 'Load');
+    setTimeout(() => {
+      loadingEl.classList.remove('indeterminate', 'error');
+      loadingEl.classList.add('hidden');
+      bioBtn.classList.add('show');
+      startAudio();
+    }, 300);
+  } catch(error) {
+    console.error('Không thể khởi tạo viewer:', error);
+    showLoadError('Lỗi tải — chạm Thử lại');
   }
-
-  setProgress(.95, 'Đang dựng chữ…');
-  textGroup = buildText(font); frameText(); attachPointer(renderer.domElement);
-  setProgress(1, 'Xong!');
-  setTimeout(() => { loadingEl.classList.add('hidden'); bioBtn.classList.add('show'); startAudio(); }, 450);
 }
 
-addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  if(!userMoved) frameText();
+retryBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (loadFailed) main();
 });
 main();
 </script>
