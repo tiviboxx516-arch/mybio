@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07080c">
+<title>La Minh Khánh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;600;800&family=Caveat:wght@600&family=Quicksand:wght@300..700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07080c;--ink:#efe9e1;--mute:#8d8a86;--pink:#ff8fbf;--acc:255,143,191;--line:rgba(239,233,225,.12);color-scheme:dark}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,sans-serif}
+*{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='14' cy='14' r='9' fill='%23ff8fbf' fill-opacity='.3'/%3E%3Ccircle cx='14' cy='14' r='4.5' fill='%23ff8fbf'/%3E%3Ccircle cx='14' cy='14' r='2' fill='%23fff'/%3E%3C/svg%3E") 14 14,auto!important}
+#viewer{position:fixed;inset:0;touch-action:none}
+#viewer canvas{display:block;width:100%;height:100%;outline:none}
+
+/* loading */
+#loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);transition:opacity .7s,visibility .7s}
+#loading.hidden{opacity:0;visibility:hidden;pointer-events:none}
+#loadStatus{font:400 12px "Be Vietnam Pro";letter-spacing:.08em;color:var(--mute);margin:0}
+.bar{width:min(260px,70vw);height:2px;background:var(--line);position:relative}
+#progressFill{position:absolute;inset:0 auto 0 0;width:0;background:var(--pink);box-shadow:0 0 12px var(--pink);transition:width .3s}
+#progressPct{font:300 54px "Quicksand";letter-spacing:-.02em;margin:0}
+
+/* nút mở bio */
+#bio-btn{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:30;padding:11px 22px;border:1px solid var(--line);border-radius:999px;background:rgba(7,8,12,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--ink);font:600 12px "Be Vietnam Pro";letter-spacing:.16em;text-transform:uppercase;opacity:0;visibility:hidden;transition:.4s;display:flex;gap:10px;align-items:center}
+#bio-btn.show{opacity:1;visibility:visible}
+#bio-btn i{width:7px;height:7px;border-radius:50%;background:var(--pink);box-shadow:0 0 10px var(--pink)}
+#bio-btn:hover{border-color:var(--pink);color:var(--pink)}
+
+/* bio */
+#bio{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden;background:radial-gradient(ellipse at 90% 0,rgba(var(--acc),.13),transparent 50%),rgba(7,8,12,.9);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);opacity:0;visibility:hidden;transition:opacity .5s,visibility .5s}
+#bio.show{opacity:1;visibility:visible}
+#bio::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.07;mix-blend-mode:overlay;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.sheet{position:relative;width:min(900px,100%);display:grid;grid-template-columns:270px 1fr;border:1px solid var(--line);border-radius:6px;background:rgba(14,15,20,.72);overflow:hidden;transform:translateY(30px) rotate(-.6deg) scale(var(--k,1));transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+#bio.show .sheet{transform:scale(var(--k,1))}
+.spot{position:absolute;inset:0;pointer-events:none;background:radial-gradient(380px circle at var(--mx,50%) var(--my,0%),rgba(var(--acc),.10),transparent 60%)}
+.side{position:relative;padding:34px 26px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.ava{width:150px;height:150px;position:relative;transform-style:preserve-3d;transition:transform .15s;will-change:transform}
+.ava .pic{position:absolute;inset:0;overflow:hidden;border-radius:50% 46% 54% 48%/48% 54% 46% 52%;background:#1b1c24;display:flex;align-items:center;justify-content:center;font:300 48px Quicksand;animation:morph 9s ease-in-out infinite}
+.ava .pic img{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;max-width:100%;object-fit:cover;object-position:center;border:0;margin:0;padding:0}
+.ava .pic .fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none}
+.ava .pic.has-image .fallback{display:none}
+.ava::before{content:"";position:absolute;inset:-8px;border:1px dashed rgba(var(--acc),.5);border-radius:50%;animation:spin 30s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes morph{50%{border-radius:46% 52% 48% 54%/54% 46% 54% 46%}}
+.nm{font:800 25px/1.15 "Be Vietnam Pro";letter-spacing:-.02em;margin:10px 0 0;min-height:58px}
+.caret{display:inline-block;width:2px;height:.95em;margin-left:2px;background:var(--pink);transform:translateY(3px);animation:cb .8s step-end infinite}
+@keyframes cb{50%{opacity:0}}
+.role{font-size:12.5px;line-height:1.6;color:var(--mute);margin:0}
+.note{font:600 21px Caveat;color:var(--pink);margin:0;transform:rotate(-3deg)}
+.clock{font-size:11px;color:var(--mute);margin:0;padding-top:14px;border-top:1px solid var(--line)}
+.clock b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+.clock b::before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:#7dffb0;animation:cb 1.6s infinite}
+.stats{display:flex;gap:18px;margin-top:auto}
+.stats div{font-size:10.5px;color:var(--mute);line-height:1.4}
+.stats b{display:block;font:300 34px Quicksand;color:var(--ink)}
+.main{padding:34px 36px 28px;display:flex;flex-direction:column;gap:30px;min-width:0}
+h3{font:600 11px "Be Vietnam Pro";letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin:0 0 12px;display:flex;gap:12px;align-items:center}
+h3::after{content:"";flex:1;height:1px;background:var(--line)}
+h3 span{color:var(--pink)}
+.main p.t{font-size:14.5px;line-height:1.9;color:#cfc9c1;margin:0}
+.main p.t mark{background:linear-gradient(transparent 62%,rgba(var(--acc),.35) 0);color:var(--ink);padding:0 2px}
+.pj{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none;transition:padding .35s,border-color .35s}
+.pj:hover{padding-left:12px;border-color:var(--pink)}
+.pj .n{font:400 12px "Quicksand";color:var(--mute);transition:color .3s}
+.pj:hover .n{color:var(--pink)}
+.pj b{display:block;font-weight:600;font-size:15px;margin-bottom:3px}
+.pj small{font-size:12.5px;color:var(--mute);line-height:1.5}
+.pj em{font:400 11px "Quicksand";font-style:normal;color:var(--pink);border:1px solid rgba(var(--acc),.35);padding:2px 9px;border-radius:99px}
+.marq{overflow:hidden;mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);-webkit-mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+.trk{display:flex;width:max-content;animation:mq 22s linear infinite}
+.marq:hover .trk{animation-play-state:paused}
+.trk span{font:300 30px Quicksand;padding-right:34px;white-space:nowrap;color:var(--ink)}
+.trk span::after{content:"✦";font-size:13px;color:var(--pink);margin-left:34px;vertical-align:middle}
+@keyframes mq{to{transform:translateX(-50%)}}
+.hint{font-size:11px;color:var(--mute);margin:0}
+#bio-close{position:absolute;top:12px;right:12px;z-index:5;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ink);transition:.3s}
+#bio-close:hover{border-color:var(--pink);color:var(--pink);transform:rotate(90deg)}
+.rv{opacity:0;transform:translateY(16px);transition:opacity .7s,transform .7s cubic-bezier(.2,.8,.2,1);transition-delay:calc(var(--i,0)*90ms + 300ms)}
+#bio.show .rv{opacity:1;transform:none}
+.sp{position:fixed;width:5px;height:5px;margin:-2px;border-radius:50%;background:var(--pink);box-shadow:0 0 8px var(--pink);pointer-events:none;z-index:60;animation:spf .8s forwards}
+@keyframes spf{to{opacity:0;transform:translateY(16px) scale(.2)}}
+@media(max-width:700px){.sheet{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line);align-items:center;text-align:center}.main{padding:26px 22px}.stats{margin-top:6px}#bio-btn{bottom:18px}}
+
+.sheet{width:min(1000px,100%);box-shadow:0 40px 120px rgba(0,0,0,.55)}
+.sheet::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--pink),transparent);opacity:.8}
+.soc{display:flex;flex-wrap:wrap;gap:6px}
+.soc a{font-size:11px;color:var(--ink);text-decoration:none;padding:5px 11px;border:1px solid var(--line);border-radius:99px;transition:.3s}
+.soc a:hover{border-color:var(--pink);color:var(--pink);transform:translateY(-2px)}
+.pcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.pc{position:relative;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none;background:rgba(255,255,255,.02);transition:transform .4s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .4s}
+.pc:hover{transform:translateY(-5px);border-color:var(--pink);box-shadow:0 16px 40px rgba(0,0,0,.4),0 0 30px rgba(var(--acc),.14)}
+.pc .im{position:relative;aspect-ratio:16/10;overflow:hidden;background:linear-gradient(135deg,rgba(var(--acc),.25),#15161d)}
+.pc .im img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .8s}
+.pc:hover .im img{transform:scale(1.08)}
+.pc .im em{position:absolute;left:10px;top:10px;font:600 10px Quicksand;font-style:normal;letter-spacing:.06em;padding:3px 9px;border-radius:99px;background:rgba(7,8,12,.72);color:var(--pink);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.pc .ar{position:absolute;right:10px;top:10px;width:28px;height:28px;border-radius:50%;background:rgba(7,8,12,.75);display:flex;align-items:center;justify-content:center;font-size:13px;opacity:0;transform:translate(-6px,6px);transition:.3s}
+.pc:hover .ar{opacity:1;transform:none;color:var(--pink)}
+.pc .pb{padding:12px 14px 15px}
+.pc b{display:block;font-size:14.5px;margin-bottom:4px}
+.pc small{display:block;font-size:12px;color:var(--mute);line-height:1.55}
+.tl{position:relative;padding-left:22px}
+.tl::before{content:"";position:absolute;left:4px;top:6px;bottom:10px;width:1px;background:var(--line)}
+.ti{position:relative;padding-bottom:18px}
+.ti i{position:absolute;left:-22px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--bg);border:2px solid var(--pink)}
+.ti span{font:600 11px Quicksand;color:var(--pink);letter-spacing:.12em}
+.ti b{display:block;font-size:14px;margin:2px 0}
+.ti small{font-size:12.5px;color:var(--mute);line-height:1.6}
+.gal{columns:3 150px;column-gap:10px}
+.gal figure{position:relative;margin:0 0 10px;break-inside:avoid;overflow:hidden;border-radius:8px;border:1px solid var(--line);cursor:zoom-in}
+.gal img{width:100%;display:block;filter:saturate(.8);transition:transform .6s,filter .6s}
+.gal figure:hover img{transform:scale(1.06);filter:none}
+.gal figcaption{position:absolute;inset:auto 0 0;padding:22px 10px 8px;font-size:11px;background:linear-gradient(transparent,rgba(0,0,0,.78));opacity:0;transition:.3s}
+.gal figure:hover figcaption{opacity:1}
+#lb{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(5,6,9,.93);opacity:0;visibility:hidden;transition:.35s}
+#lb.show{opacity:1;visibility:visible}
+#lb img{max-width:90vw;max-height:78vh;border-radius:8px}
+#lb p{font-size:13px;color:var(--mute);margin:0}
+
+.main{gap:18px;padding:30px 32px 24px}
+.hint{margin-top:auto}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;font:600 12px "Be Vietnam Pro";color:var(--mute);background:transparent;border:1px solid var(--line);border-radius:99px;padding:7px 15px;transition:.3s}
+.tab:hover{color:var(--ink)}
+.tab.on{color:#14090f;background:var(--pink);border-color:var(--pink)}
+.panels{display:grid}
+.pnl{grid-area:1/1;min-width:0;opacity:0;visibility:hidden;transform:translateX(14px);transition:opacity .4s,transform .5s cubic-bezier(.2,.8,.2,1),visibility .4s}
+.pnl.on{opacity:1;visibility:visible;transform:none}
+@media(max-width:700px){
+.side{display:grid;grid-template-columns:84px 1fr;grid-template-areas:"a n" "a r" "s s" "t t";column-gap:14px;row-gap:4px;padding:18px 18px 14px;text-align:left;align-items:center}
+.ava{grid-area:a;width:84px;height:84px}.ava::before{inset:-5px}.ava .pic{font-size:28px}
+.nm{grid-area:n;font-size:19px;min-height:26px;margin:0}
+.role{grid-area:r;font-size:11.5px;line-height:1.45}
+.note,.clock,.hint{display:none}
+.soc{grid-area:s;margin-top:8px}
+.stats{grid-area:t;margin-top:8px;gap:14px}.stats b{font-size:24px}
+.main{padding:14px 16px 16px;gap:12px}
+.main p.t{font-size:13.5px;line-height:1.75}
+.pcs{grid-template-columns:1fr;gap:8px}
+.pc{flex-direction:row}.pc .im{width:92px;aspect-ratio:1;flex:none}.pc .ar{display:none}.pc .pb{padding:10px 12px}
+.trk span{font-size:24px}
+}
+#snd{position:fixed;top:14px;left:14px;z-index:60;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:rgba(7,8,12,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;gap:3px;padding:0;transition:border-color .3s}
+#snd.show{display:flex}
+#snd:hover{border-color:var(--pink)}
+#snd i{display:block;width:3px;height:14px;border-radius:2px;background:var(--mute);transform:scaleY(.25);transition:background .3s}
+#snd.on i{background:var(--pink);animation:eq .9s ease-in-out infinite}
+#snd.on i:nth-child(2){animation-delay:-.3s}#snd.on i:nth-child(3){animation-delay:-.6s}#snd.on i:nth-child(4){animation-delay:-.15s}
+#snd.wait{animation:pr 1.6s ease-out infinite}
+@keyframes eq{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes pr{0%{box-shadow:0 0 0 0 rgba(var(--acc),.55)}100%{box-shadow:0 0 0 14px rgba(var(--acc),0)}}
+html,body,#viewer,#loading,#bio,#bio-btn,#snd{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#viewer,#viewer canvas{touch-action:none}
+img,canvas{-webkit-user-drag:none;user-drag:none}
+::selection{background:transparent}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","opentype":"https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.module.js"}}
+</script>
+</head>
+<body>
+<div id="viewer"></div>
+
+<div id="loading">
+  <p id="progressPct">0%</p>
+  <div class="bar"><div id="progressFill"></div></div>
+  <p id="loadStatus">Đang tải ảnh 360°…</p>
+</div>
+
+<button id="bio-btn"><i></i>Giới thiệu</button>
+
+<button id="snd" aria-label="Bật/tắt nhạc"><i></i><i></i><i></i><i></i></button>
+
+<div id="bio">
+  <div class="sheet" id="sheet"><div class="spot"></div><button id="bio-close" aria-label="Đóng">✕</button></div>
+</div>
+
+<script type="module">
+import CONFIG from './config.js';
+import * as THREE from 'three';
+import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
+import {FontLoader, Font} from 'three/addons/loaders/FontLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = id => document.getElementById(id);
+renderBio();
+const viewer = $('viewer'), loadingEl = $('loading'), loadStatus = $('loadStatus');
+const progressFill = $('progressFill'), progressPct = $('progressPct');
+const bioEl = $('bio'), bioBtn = $('bio-btn'), nameEl = $('bioNameText');
+
+let scene, camera, renderer, controls, panorama, textGroup;
+let userMoved = false, lastFrame = 0, bioOpen = false;
+const SPIN = CONFIG.scene.spin;
+
+const S = CONFIG.scene;
+const TEXT = { label:S.text, size:S.size, depth:S.depth, curveSegments:16, bevelThickness:.032, bevelSize:.024, bevelSegments:5, fraction:S.screenFraction };
+
+function setProgress(p, msg){
+  p = Math.max(0, Math.min(1, p));
+  progressPct.textContent = Math.round(p*100) + '%';
+  progressFill.style.width = p*100 + '%';
+  if(msg) loadStatus.textContent = msg;
+}
+
+async function fetchWithProgress(url, onProgress){
+  const res = await fetch(url, {mode:'cors'});
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const total = +res.headers.get('Content-Length') || 0;
+  if(!res.body || !total){ const b = await res.blob(); onProgress?.(1); return b; }
+  const reader = res.body.getReader(), chunks = []; let got = 0;
+  for(;;){
+    const {done, value} = await reader.read();
+    if(done) break;
+    chunks.push(value); got += value.length;
+    onProgress?.(Math.min(got/total, 1));
+  }
+  return new Blob(chunks);
+}
+
+/* TTF -> THREE.Font */
+const rd = v => Math.round(v*100)/100;
+function toThreeFont(ot, chars){
+  const sc = 1000 / (ot.unitsPerEm || 1000), glyphs = {};
+  for(const ch of chars){
+    const g = ot.charToGlyph(ch); if(!g) continue;
+    const path = g.getPath(0,0,1000); let d = '';
+    for(const c of path.commands){
+      if(c.type==='M') d += `m ${rd(c.x)} ${rd(-c.y)} `;
+      else if(c.type==='L') d += `l ${rd(c.x)} ${rd(-c.y)} `;
+      else if(c.type==='Q') d += `q ${rd(c.x)} ${rd(-c.y)} ${rd(c.x1)} ${rd(-c.y1)} `;
+      else if(c.type==='C') d += `b ${rd(c.x)} ${rd(-c.y)} ${rd(c.x1)} ${rd(-c.y1)} ${rd(c.x2)} ${rd(-c.y2)} `;
+      else if(c.type==='Z') d += 'z ';
+    }
+    const bb = path.getBoundingBox();
+    glyphs[ch] = { ha: rd(g.advanceWidth*sc), x_min: rd(isFinite(bb.x1)?bb.x1:0), x_max: rd(isFinite(bb.x2)?bb.x2:0), o: d.trim() };
+  }
+  return new Font({ glyphs, familyName:'Quicksand', ascender:800, descender:-200,
+    underlinePosition:-100, underlineThickness:50,
+    boundingBox:{yMin:-300, xMin:-100, yMax:1000, xMax:1200}, resolution:1000 });
+}
+
+const FONTS = [
+  CONFIG.scene.font,
+  'https://fonts.gstatic.com/s/quicksand/v37/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkP8o18G0wx40QDw.ttf',
+  'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/quicksand/Quicksand%5Bwght%5D.ttf',
+  'https://raw.githubusercontent.com/google/fonts/main/ofl/quicksand/Quicksand%5Bwght%5D.ttf'
+];
+const CHARS = [...new Set(CONFIG.scene.text + ' ' + CONFIG.name)].join('');
+
+async function loadFont(onProgress){
+  let opentype;
+  try{ const m = await import('opentype'); opentype = m.default || m; }catch(e){ return null; }
+  for(const url of FONTS){
+    try{
+      const buf = await (await fetchWithProgress(url, onProgress)).arrayBuffer();
+      if(buf.byteLength < 1000) throw 0;
+      const ot = opentype.parse(buf);
+      try{ if(ot.tables?.fvar && ot.variation?.set) ot.variation.set({wght:500}); }catch(e){}
+      const f = toThreeFont(ot, CHARS);
+      if([...TEXT.label.replace(/\s/g,'')].some(c => !f.data.glyphs[c]?.o)) throw 0;
+      return f;
+    }catch(e){ /* thử nguồn tiếp theo */ }
+  }
+  return null;
+}
+
+/* scene */
+function setupScene(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x07080c);
+  camera = new THREE.PerspectiveCamera(46, innerWidth/innerHeight, .1, 5000);
+  camera.position.set(0,0,24);
+  renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  viewer.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+  scene.add(new THREE.HemisphereLight(0xe7f7ff, 0x172238, 1.7));
+  const key = new THREE.DirectionalLight(0xffffff, 3); key.position.set(-7,10,15); scene.add(key);
+  const a = new THREE.PointLight(0x66e5ff, 150, 90); a.position.set(8,5,10); scene.add(a);
+  const b = new THREE.PointLight(0xff9ec9, 110, 90); b.position.set(-8,-5,-10); scene.add(b);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  Object.assign(controls, {enableDamping:true, dampingFactor:.075, enablePan:false, zoomSpeed:.85, rotateSpeed:.7,
+    minPolarAngle:.002, maxPolarAngle:Math.PI-.002, minDistance:2.8, maxDistance:1000});
+  controls.addEventListener('start', () => userMoved = true);
+  controls.update();
+}
+
+function buildPanorama(tex){
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const g = new THREE.SphereGeometry(1200,160,100); g.scale(-1,1,1);
+  panorama = new THREE.Mesh(g, new THREE.MeshBasicMaterial({map:tex, depthWrite:false, toneMapped:false}));
+  panorama.frustumCulled = false; panorama.renderOrder = -1000; panorama.rotation.order = 'YXZ';
+  scene.add(panorama);
+}
+
+function buildText(font){
+  const c = TEXT, group = new THREE.Group();
+  const geo = new TextGeometry(c.label, {font, size:c.size, height:c.depth, depth:c.depth, curveSegments:c.curveSegments,
+    bevelEnabled:true, bevelThickness:c.bevelThickness, bevelSize:c.bevelSize, bevelOffset:0, bevelSegments:c.bevelSegments});
+  geo.computeVertexNormals(); geo.center();
+  const face = new THREE.MeshPhysicalMaterial({color:CONFIG.scene.faceColor, metalness:.24, roughness:.18, clearcoat:1, clearcoatRoughness:.08,
+    reflectivity:.82, emissive:0x22102a, emissiveIntensity:.14, envMapIntensity:1.2, side:THREE.DoubleSide});
+  const edge = new THREE.MeshPhysicalMaterial({color:CONFIG.scene.edgeColor, metalness:.5, roughness:.22, clearcoat:.88, clearcoatRoughness:.12,
+    emissive:0x0a3a52, emissiveIntensity:.4, envMapIntensity:1.35, side:THREE.DoubleSide});
+  const mesh = new THREE.Mesh(geo, [face, edge]);
+  group.add(mesh); group.rotation.order = 'YXZ'; group.userData.mesh = mesh;
+  scene.add(group);
+  return group;
+}
+
+/* bấm vào chữ -> mở bio */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function onText(x, y){
+  if(!textGroup) return false;
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((x-r.left)/r.width)*2-1, -((y-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc, camera);
+  if(ray.intersectObject(textGroup.userData.mesh, true).length) return true;
+  const box = new THREE.Box3().setFromObject(textGroup), v = new THREE.Vector3();
+  let x0=Infinity, x1=-Infinity, y0=Infinity, y1=-Infinity;
+  for(const X of [box.min.x, box.max.x]) for(const Y of [box.min.y, box.max.y]) for(const Z of [box.min.z, box.max.z]){
+    v.set(X,Y,Z).project(camera);
+    x0=Math.min(x0,v.x); x1=Math.max(x1,v.x); y0=Math.min(y0,v.y); y1=Math.max(y1,v.y);
+  }
+  const px = 20/r.width, py = 20/r.height;
+  return ndc.x>=x0-px && ndc.x<=x1+px && ndc.y>=y0-py && ndc.y<=y1+py;
+}
+
+function attachPointer(dom){
+  let down = null;
+  dom.addEventListener('pointerdown', e => { if(e.button) return; down = {x:e.clientX, y:e.clientY, id:e.pointerId, moved:false}; }, true);
+  dom.addEventListener('pointermove', e => {
+    if(down && e.pointerId===down.id){ if((e.clientX-down.x)**2 + (e.clientY-down.y)**2 > 36) down.moved = true; return; }
+    dom.style.outline = '';
+  }, true);
+  dom.addEventListener('pointerup', e => {
+    if(!down || e.pointerId!==down.id) return;
+    const d = down; down = null;
+    if(!d.moved && !bioOpen && onText(e.clientX, e.clientY)) openBio();
+  }, true);
+  dom.addEventListener('pointercancel', () => down = null, true);
+}
+
+/* gõ tên kiểu người thật, lặp lại */
+const NAME = CONFIG.name;
+let timers = [];
+function stopTyping(){ timers.forEach(clearTimeout); timers = []; }
+function startTyping(){
+  stopTyping(); nameEl.textContent = '';
+  let i = 0, dir = 1;
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  (function tick(){
+    if(dir === 1){
+      nameEl.textContent = NAME.slice(0, ++i);
+      if(i >= NAME.length){ dir = -1; return later(tick, 2200); }
+      let ms = 80 + Math.random()*50;
+      if(NAME[i-1]===' ') ms += 60;
+      if(Math.random()<.1) ms += 200;
+      later(tick, ms);
+    }else{
+      nameEl.textContent = NAME.slice(0, --i);
+      if(i <= 0){ dir = 1; return later(tick, 600); }
+      later(tick, 40 + Math.random()*40);
+    }
+  })();
+}
+
+/* dựng bio từ config */
+function renderBio(){
+  const C = CONFIG, E = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const M = t => E(t).replace(/\*\*(.+?)\*\*/g, '<mark>$1</mark>');
+  let i = 0; const R = () => `rv" style="--i:${Math.min(i++, 10)}`;
+  const st = document.documentElement.style;
+  st.setProperty('--pink', C.theme.accent);
+  st.setProperty('--acc', C.theme.accent.replace('#','').match(/../g).map(h => parseInt(h,16)).join(','));
+  document.title = C.tabTitle || C.name;
+  document.getElementById('bio-btn').innerHTML = '<i></i>' + E(C.ui.buttonLabel);
+
+  const initials = E(String(C.name || '').split(' ').map(w => w[0] || '').join('').slice(0,2));
+  const avatarUrl = String(C.avatar ?? '').trim();
+  const avatarMarkup = avatarUrl ? `<img src="${E(avatarUrl)}" alt="" decoding="async" onload="this.parentElement.classList.add('has-image')" onerror="this.parentElement.classList.remove('has-image');this.remove()">` : '';
+  const side = `<aside class="side">
+    <div class="ava ${R()}" id="ava"><div class="pic">${avatarMarkup}<span class="fallback">${initials}</span></div></div>
+    <h2 class="nm ${R()}"><span id="bioNameText"></span><span class="caret"></span></h2>
+    <p class="role ${R()}">${E(C.role)}</p>
+    ${C.note ? `<p class="note ${R()}">${E(C.note)}</p>` : ''}
+    ${C.clock.show ? `<p class="clock ${R()}">${E(C.clock.label)} <b id="clk">--:--</b></p>` : ''}
+    <div class="soc ${R()}">${C.socials.map(x => `<a href="${E(x.url)}" target="_blank" rel="noopener">${E(x.label)}</a>`).join('')}</div>
+    <div class="stats ${R()}">${C.stats.map(x => `<div><b data-n="${+x.value}">0</b>${E(x.label)}</div>`).join('')}</div>
+  </aside>`;
+
+  const build = {
+    about:    d => d.text.map(p => `<p class="t">${M(p)}</p>`).join(''),
+    projects: d => `<div class="pcs">${d.items.map(p => {
+      const a = p.link ? `href="${E(p.link)}" target="_blank" rel="noopener"` : `href="#" onclick="return false"`;
+      return `<a class="pc" ${a}><div class="im"><img src="${E(p.image)}" loading="lazy" alt="" onerror="this.remove()"><em>${E(p.tag)}</em><span class="ar">↗</span></div><div class="pb"><b>${E(p.name)}</b><small>${E(p.desc)}</small></div></a>`;
+    }).join('')}</div>`,
+    timeline: d => `<div class="tl">${d.items.map(t => `<div class="ti"><i></i><span>${E(t.year)}</span><b>${E(t.title)}</b><small>${E(t.desc)}</small></div>`).join('')}</div>`,
+    gallery:  d => `<div class="gal">${d.items.slice(0, d.max || 6).map(g => `<figure><img src="${E(g.src)}" loading="lazy" alt="" onerror="this.closest('figure').remove()"><figcaption>${E(g.caption)}</figcaption></figure>`).join('')}</div>`,
+    skills:   d => { const l = d.items.map(x => `<span>${E(x)}</span>`).join(''); return `<div class="marq"><div class="trk">${l}${l}</div></div>`; }
+  };
+  const keys = C.sections.filter(k => build[k] && (C[k].items ? C[k].items.length : true));
+  const tabs = keys.map((k, j) => `<button class="tab${j ? '' : ' on'}">${E(C[k].title)}</button>`).join('');
+  const pn = keys.map((k, j) => `<section class="pnl${j ? '' : ' on'}">${build[k](C[k])}</section>`).join('');
+  document.getElementById('sheet').insertAdjacentHTML('beforeend', side + `<main class="main"><div class="tabs ${R()}">${tabs}</div><div class="panels ${R()}">${pn}</div><p class="hint ${R()}">${E(C.ui.hint)}</p></main>`);
+  document.body.insertAdjacentHTML('beforeend', '<div id="lb"><img alt=""><p></p></div>');
+}
+
+/* hiệu ứng trong bio */
+const sheet = $('sheet'), ava = $('ava'), clk = $('clk'), lb = $('lb');
+if(clk){
+  const tc = () => clk.textContent = new Date().toLocaleTimeString('vi-VN', {timeZone:CONFIG.clock.timezone, hour:'2-digit', minute:'2-digit'});
+  tc(); setInterval(tc, 15000);
+}
+sheet.addEventListener('pointermove', e => {
+  const r = sheet.getBoundingClientRect();
+  sheet.style.setProperty('--mx', (e.clientX-r.left)/fitK + 'px');
+  sheet.style.setProperty('--my', (e.clientY-r.top)/fitK + 'px');
+  const a = ava.getBoundingClientRect();
+  const dx = (e.clientX - (a.left + a.width/2)) / r.width, dy = (e.clientY - (a.top + a.height/2)) / r.height;
+  ava.style.transform = `perspective(500px) rotateY(${dx*26}deg) rotateX(${-dy*26}deg)`;
+});
+sheet.addEventListener('pointerleave', () => ava.style.transform = '');
+sheet.addEventListener('click', e => {
+  const f = e.target.closest('figure'); if(!f) return;
+  lb.querySelector('img').src = f.querySelector('img').src;
+  lb.querySelector('p').textContent = f.textContent.trim();
+  lb.classList.add('show');
+});
+lb.addEventListener('click', () => lb.classList.remove('show'));
+addEventListener('keydown', e => { if(e.key === 'Escape') lb.classList.remove('show'); });
+
+/* tab + vuốt */
+const tabEls = [...sheet.querySelectorAll('.tab')], pnls = [...sheet.querySelectorAll('.pnl')];
+let cur = 0;
+function go(j){
+  if(!tabEls.length) return;
+  cur = (j + tabEls.length) % tabEls.length;
+  tabEls.forEach((t, x) => t.classList.toggle('on', x === cur));
+  pnls.forEach((p, x) => p.classList.toggle('on', x === cur));
+  const t = tabEls[cur], bar = t.parentNode;
+  bar.scrollTo({left: t.offsetLeft - bar.clientWidth/2 + t.offsetWidth/2, behavior:'smooth'});
+}
+tabEls.forEach((t, j) => t.addEventListener('click', () => go(j)));
+addEventListener('keydown', e => { if(!bioOpen) return; if(e.key === 'ArrowRight') go(cur+1); if(e.key === 'ArrowLeft') go(cur-1); });
+let sx = null; const pw = sheet.querySelector('.panels');
+pw.addEventListener('touchstart', e => sx = e.touches[0].clientX, {passive:true});
+pw.addEventListener('touchend', e => {
+  if(sx == null) return;
+  const d = e.changedTouches[0].clientX - sx; sx = null;
+  if(Math.abs(d) > 50) go(cur + (d < 0 ? 1 : -1));
+});
+
+/* tự scale cho vừa màn hình, không cần cuộn */
+let fitK = 1;
+function fit(){
+  sheet.style.width = '';
+  const vw = innerWidth - 16, vh = innerHeight - 16;
+  for(let n = 0; n < 4; n++){
+    const k = Math.min(1, vh / sheet.offsetHeight);
+    if(k > .999) break;
+    sheet.style.width = Math.min(vw / k, 1000) + 'px';
+  }
+  fitK = Math.min(1, vh / sheet.offsetHeight, vw / sheet.offsetWidth);
+  sheet.style.setProperty('--k', fitK);
+}
+addEventListener('resize', fit);
+addEventListener('orientationchange', () => setTimeout(fit, 250));
+sheet.addEventListener('load', fit, true);
+document.fonts?.ready.then(fit);
+fit();
+
+let lastSp = 0;
+bioEl.addEventListener('pointermove', e => {
+  const t = performance.now(); if(t - lastSp < 45) return; lastSp = t;
+  const s = document.createElement('i'); s.className = 'sp';
+  s.style.left = e.clientX + 'px'; s.style.top = e.clientY + 'px';
+  document.body.appendChild(s); setTimeout(() => s.remove(), 800);
+});
+
+function countUp(){
+  document.querySelectorAll('[data-n]').forEach(el => {
+    const to = +el.dataset.n, t0 = performance.now();
+    (function f(t){
+      const k = Math.min((t - t0)/1100, 1);
+      el.textContent = Math.round(to * (1 - Math.pow(1-k, 3)));
+      if(k < 1) requestAnimationFrame(f);
+    })(t0);
+  });
+}
+
+function openBio(){
+  bioOpen = true; fit(); bioEl.classList.add('show');
+  setTimeout(() => { startTyping(); countUp(); }, 400);
+}
+function closeBio(){ bioOpen = false; bioEl.classList.remove('show'); stopTyping(); }
+bioBtn.addEventListener('click', e => { e.stopPropagation(); openBio(); });
+$('bio-close').addEventListener('click', closeBio);
+bioEl.addEventListener('click', e => { if(e.target === bioEl) closeBio(); });
+addEventListener('keydown', e => { if(e.key === 'Escape' && bioOpen) closeBio(); });
+
+/* khung hình + vòng lặp */
+function frameText(){
+  if(!textGroup) return;
+  const bb = textGroup.userData.mesh.geometry.boundingBox;
+  const w = bb ? bb.max.x - bb.min.x : 10;
+  const aspect = Math.max(camera.aspect, .32), half = THREE.MathUtils.degToRad(camera.fov/2);
+  const dist = THREE.MathUtils.clamp(w / (2*Math.tan(half)*aspect*TEXT.fraction), w*1.35, w*15);
+  camera.position.set(0,0,dist);
+  controls.target.set(0,0,0);
+  controls.minDistance = Math.max(2.8, w*.14);
+  controls.maxDistance = Math.max(500, dist*6);
+  controls.update();
+}
+
+function animate(now = 0){
+  requestAnimationFrame(animate);
+  const dt = lastFrame ? Math.min((now-lastFrame)/1000, .05) : 0; lastFrame = now;
+  controls?.update();
+  if(dt && !bioOpen){
+    if(textGroup) textGroup.rotation.y += SPIN*dt;
+    if(panorama) panorama.rotation.y += SPIN*dt;
+  }
+  if(panorama) panorama.position.copy(camera.position);
+  renderer.render(scene, camera);
+}
+
+/* nhạc nền: phát sau khi tải xong, nếu trình duyệt chặn thì phát ở lần chạm đầu tiên */
+const AU = CONFIG.audio || {}, snd = $('snd');
+let audio = null, wantPlay = true, fadeT = null;
+function setupAudio(){
+  if(!AU.enabled || audio) return;
+  audio = new Audio(AU.src);
+  audio.loop = AU.loop !== false; audio.preload = 'auto'; audio.volume = 0;
+  audio.addEventListener('error', () => { snd.classList.remove('show', 'on', 'wait'); audio = null; });
+}
+function fadeTo(v, ms = 1500){
+  clearInterval(fadeT);
+  const v0 = audio.volume, t0 = performance.now();
+  fadeT = setInterval(() => {
+    if(!audio) return clearInterval(fadeT);
+    const k = Math.min((performance.now() - t0) / ms, 1);
+    audio.volume = v0 + (v - v0) * k;
+    if(k >= 1) clearInterval(fadeT);
+  }, 50);
+}
+function playAudio(){
+  if(!audio || !wantPlay) return Promise.resolve();
+  return audio.play()
+    .then(() => { snd.classList.add('on'); snd.classList.remove('wait'); fadeTo(AU.volume ?? .6); })
+    .catch(() => snd.classList.add('wait'));
+}
+function startAudio(){
+  if(!audio) return;
+  snd.classList.add('show');
+  playAudio();
+  const evs = ['pointerdown', 'touchend', 'click', 'keydown'];
+  const unlock = e => {
+    if(e.target?.closest?.('#snd')) return;
+    playAudio().then(() => { if(audio && !audio.paused) evs.forEach(x => removeEventListener(x, unlock)); });
+  };
+  evs.forEach(x => addEventListener(x, unlock));
+}
+snd.addEventListener('click', () => {
+  if(!audio) return;
+  if(audio.paused){ wantPlay = true; playAudio(); }
+  else{ wantPlay = false; audio.pause(); snd.classList.remove('on'); }
+});
+document.addEventListener('visibilitychange', () => {
+  if(!audio) return;
+  if(document.hidden){ audio.pause(); snd.classList.remove('on'); }
+  else if(wantPlay) playAudio();
+});
+
+/* chặn bôi xanh / kéo ảnh làm gián đoạn lúc xoay */
+['selectstart', 'dragstart'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+document.addEventListener('contextmenu', e => { if(e.target.closest?.('#viewer')) e.preventDefault(); });
+
+async function main(){
+  setupScene(); animate();
+  renderer.domElement.addEventListener('pointerdown', e => { e.preventDefault(); getSelection()?.removeAllRanges(); });
+  setProgress(0, 'Đang tải ảnh 360°…');
+  let tex;
+  try{
+    const blob = await fetchWithProgress(CONFIG.scene.panorama, p => setProgress(p*.55, 'Đang tải ảnh 360°…'));
+    const url = URL.createObjectURL(blob);
+    tex = await new THREE.TextureLoader().loadAsync(url);
+    URL.revokeObjectURL(url);
+  }catch(e){ loadStatus.textContent = 'Không tải được ảnh 360°'; return; }
+  buildPanorama(tex);
+  setupAudio();
+
+  setProgress(.58, 'Đang tải font…');
+  let font = await loadFont(p => setProgress(.58 + p*.34, 'Đang tải font…'));
+  if(!font){
+    try{
+      font = await new FontLoader().loadAsync('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/optimer_bold.typeface.json');
+    }catch(e){ loadStatus.textContent = 'Không tải được font'; return; }
+  }
+
+  setProgress(.95, 'Đang dựng chữ…');
+  textGroup = buildText(font); frameText(); attachPointer(renderer.domElement);
+  setProgress(1, 'Xong!');
+  setTimeout(() => { loadingEl.classList.add('hidden'); bioBtn.classList.add('show'); startAudio(); }, 450);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if(!userMoved) frameText();
+});
+main();
+</script>
+</body>
+</html>
